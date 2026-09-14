@@ -9,7 +9,7 @@ app = Flask(__name__)
 # Lista secuencial de tus videos de Videonest (Asegúrate de que sean los links correctos)
 LISTA_VIDEOS = [
     "https://gamma.videonest.org/8949c123-dd6a-431c-85d1-cc6cdeda2583_video_v5.mp4",
-    "https://gamma.videonest.org/4381d6c7-8b1d-4a27-9cd3-cfa32e3d67ab_video_v2.mp4"
+    "https://gamma.videonest.org/8949c123-dd6a-431c-85d1-cc6cdeda2583_video_v5.mp4"
 ]
 
 RTMP_URL = os.environ.get("RTMP_URL")
