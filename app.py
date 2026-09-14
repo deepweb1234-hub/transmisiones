@@ -1,60 +1,94 @@
 import os
 import subprocess
 import threading
+import time
+import requests
 from flask import Flask
 
 app = Flask(__name__)
 
-# Configuración básica
-VIDEO_FILE = "video.mp4"  # Coloca tu video con este nombre exacto en la raíz de tu proyecto
-# La URL RTMP se toma de las variables de entorno de Render
+# 🔴 PEGA AQUÍ TODAS TUS URLs DIRECTAS DE LA NUBE EN ORDEN
+# Asegúrate de separarlas por comas y envolverlas en comillas
+LISTA_VIDEOS = [
+    "https://tu-nube.com",
+    "https://tu-nube.com",
+    "https://tu-nube.com"
+]
+
 RTMP_URL = os.environ.get("RTMP_URL")
 
-def start_streaming():
+def stream_playlist():
     if not RTMP_URL:
         print("ERROR: La variable de entorno RTMP_URL no está configurada.")
         return
 
-    if not os.path.exists(VIDEO_FILE):
-        print(f"ERROR: No se encontró el archivo {VIDEO_FILE} en la raíz de la aplicación.")
+    if not LISTA_VIDEOS:
+        print("ERROR: La lista de videos está vacía.")
         return
 
-    # Comando FFmpeg optimizado para los límites de Render Free (512MB RAM / CPU compartida)
+    # Comando FFmpeg configurado para recibir datos continuos desde la tubería (pipe:0)
     ffmpeg_cmd = [
         'ffmpeg',
-        '-re',                  # Lee el archivo en tiempo real simulando una captura en vivo
-        '-stream_loop', '-1',   # Hace que el video se repita infinitamente en bucle
-        '-i', VIDEO_FILE,       # Archivo MP4 de entrada
-        '-c:v', 'libx264',      # Codec H.264 altamente compatible
-        '-preset', 'veryfast',  # Compresión rápida para no saturar la CPU gratuita de Render
-        '-b:v', '2000k',        # Bitrate de video limitado para estabilidad en redes virtuales
-        '-maxrate', '2000k',
-        '-bufsize', '4000k',
-        '-pix_fmt', 'yuv420p',  # Formato de color estándar para streaming
-        '-g', '50',             # Intervalo de fotogramas clave (Keyframes) regular
-        '-c:a', 'aac',          # Codec de audio AAC estándar
-        '-b:a', '128k',         # Calidad de audio balanceada
-        '-ar', '44100',         # Frecuencia de muestreo estándar
-        '-f', 'flv',            # Formato contenedor FLV requerido por RTMP
-        RTMP_URL                # Dirección y clave destino (YouTube, Twitch, etc.)
+        '-f', 'mp4',            # Indica que los datos entrantes por el pipe son formato MP4
+        '-i', 'pipe:0',         # Lee la entrada estándar generada por Python
+        '-c:v', 'libx264',
+        '-preset', 'veryfast',
+        '-b:v', '1500k',
+        '-maxrate', '1500k',
+        '-bufsize', '3000k',
+        '-pix_fmt', 'yuv420p',
+        '-g', '50',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-ar', '44100',
+        '-f', 'flv',            # Formato de salida para SSH101
+        RTMP_URL
     ]
 
-    print("Iniciando transmisión RTMP...")
-    process = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    
-    # Redirige los logs de FFmpeg directamente a la consola de Render para monitoreo
-    for line in process.stdout:
-        print(line, end='')
+    print("Iniciando FFmpeg en modo continuo...")
+    # Iniciamos FFmpeg esperando datos por stdin
+    ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+    # Hilo secundario para leer los logs de FFmpeg y ver errores en la consola de Render
+    def log_reader():
+        for line in ffmpeg_process.stdout:
+            print(line, end='')
+    threading.Thread(target=log_reader, daemon=True).start()
+
+    # Bucle infinito para recorrer la lista de videos una y otra vez
+    while True:
+        for url in LISTA_VIDEOS:
+            print(f"Transmitiendo ahora: {url}")
+            try:
+                # Descarga el video en fragmentos pequeños (stream=True) para no saturar la RAM de Render
+                with requests.get(url, stream=True, timeout=30) as response:
+                    response.raise_for_status()
+                    for chunk in response.iter_content(chunk_size=4096):
+                        if ffmpeg_process.poll() is not None:
+                            print("FFmpeg se detuvo inesperadamente. Reiniciando proceso...")
+                            return # Sale de la función para que el script principal lo reinicie completo
+                        
+                        # Inyecta los bytes del video directamente en el motor de FFmpeg
+                        ffmpeg_process.stdin.write(chunk)
+            except Exception as e:
+                print(f"Error al leer el video {url}: {e}. Pasando al siguiente video...")
+                time.sleep(2) # Espera breve antes de continuar si un enlace falla
+        
+        print("Lista completada. Reiniciando lista de reproducción...")
+
+def manage_stream_lifecycle():
+    while True:
+        stream_playlist()
+        print("Reiniciando el ciclo de transmisión en 5 segundos...")
+        time.sleep(5)
 
 @app.route('/')
 def home():
-    return "¡Streamer de video activo! Para transmisiones 24/7 sin interrupciones, conecta un monitor HTTP externo.", 200
+    return f"Transmisor continuo activo. Total de videos en lista: {len(LISTA_VIDEOS)}", 200
 
 if __name__ == "__main__":
-    # Inicia el proceso de streaming en un hilo secundario para evitar bloquear a Flask
-    stream_thread = threading.Thread(target=start_streaming, daemon=True)
-    stream_thread.start()
+    # Inicia el ciclo vital de la transmisión en segundo plano
+    threading.Thread(target=manage_stream_lifecycle, daemon=True).start()
     
-    # Toma el puerto asignado dinámicamente por la infraestructura de Render
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
