@@ -10,9 +10,9 @@ app = Flask(__name__)
 # 🔴 PEGA AQUÍ TODAS TUS URLs DIRECTAS DE LA NUBE EN ORDEN
 # Asegúrate de separarlas por comas y envolverlas en comillas
 LISTA_VIDEOS = [
-    "https://tu-nube.com",
-    "https://tu-nube.com",
-    "https://tu-nube.com"
+    "https://gamma.videonest.org/4381d6c7-8b1d-4a27-9cd3-cfa32e3d67ab_video_v2.mp4",
+    "https://gamma.videonest.org/4381d6c7-8b1d-4a27-9cd3-cfa32e3d67ab_video_v2.mp4",
+    "https://gamma.videonest.org/4381d6c7-8b1d-4a27-9cd3-cfa32e3d67ab_video_v2.mp4"
 ]
 
 RTMP_URL = os.environ.get("RTMP_URL")
