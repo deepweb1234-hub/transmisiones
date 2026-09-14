@@ -6,62 +6,255 @@ from flask import Flask
 
 app = Flask(__name__)
 
-# Lista secuencial de tus videos de Videonest (Asegúrate de que sean los links correctos)
+
+# ============================================================
+# VIDEOS QUE SE VAN A TRANSMITIR
+# ============================================================
+
 LISTA_VIDEOS = [
     "https://gamma.videonest.org/8949c123-dd6a-431c-85d1-cc6cdeda2583_video_v5.mp4",
-    "https://gamma.videonest.org/8949c123-dd6a-431c-85d1-cc6cdeda2583_video_v5.mp4"
 ]
+
+
+# ============================================================
+# RTMP DE SSH101 / BOZZTV
+# ============================================================
 
 RTMP_URL = os.environ.get("RTMP_URL")
 
+
+# ============================================================
+# TRANSMISIÓN
+# ============================================================
+
 def start_streaming():
+
     if not RTMP_URL:
-        print("ERROR CRÍTICO: La variable RTMP_URL no está definida.")
+
+        print(
+            "ERROR CRÍTICO: "
+            "La variable RTMP_URL no está definida."
+        )
+
         return
 
-    # Pequeña pausa inicial para garantizar que la red del contenedor esté lista
+
+    # Esperar a que la red esté disponible
     time.sleep(5)
 
+
     while True:
+
         for video_url in LISTA_VIDEOS:
-            print(f"Transmitiendo enlace en vivo: {video_url}")
-            
+
+            print()
+            print("=" * 70)
+            print("INICIANDO TRANSMISIÓN")
+            print(video_url)
+            print("=" * 70)
+            print()
+
+
+            # ====================================================
+            # FFmpeg
+            # ====================================================
+
             ffmpeg_cmd = [
-                'ffmpeg',
-                '-re',                    # Forzar lectura en tiempo real
-                '-i', video_url,          # URL del video en Videonest
-                '-c:v', 'libx264',
-                '-preset', 'ultrafast',   # Cambiado a ultrafast: usa el mínimo de CPU en Render
-                '-vf', 'scale=854:480',   # Redimensiona el video a 480p (Calidad estándar muy fluida)
-                '-b:v', '800k',           # Reducido a 800kbps (Excelente balance fluidez/calidad)
-                '-maxrate', '800k',
-                '-bufsize', '1600k',      # Búfer optimizado para evitar microcortes
-                '-pix_fmt', 'yuv420p',
-                '-g', '60',               # Fotogramas clave cada 2 segundos para estabilizar la red
-                '-c:a', 'aac',
-                '-b:a', '64k',            # Reducido el audio a 64kbps (Suficiente para prédicas limpias)
-                '-ar', '44100',
-                '-f', 'flv',
-                RTMP_URL                  # Tu variable de SSH101
+
+                "ffmpeg",
+
+                # -----------------------------------------------
+                # LEER EL VIDEO A VELOCIDAD REAL
+                # -----------------------------------------------
+
+                "-re",
+
+                # -----------------------------------------------
+                # ENTRADA
+                # -----------------------------------------------
+
+                "-i",
+                video_url,
+
+
+                # =================================================
+                # VIDEO
+                # =================================================
+
+                "-c:v",
+                "libx264",
+
+                # Menor consumo de CPU
+                "-preset",
+                "ultrafast",
+
+                # Resolución
+                "-vf",
+                "scale=854:480",
+
+                # Bitrate
+                "-b:v",
+                "800k",
+
+                "-maxrate",
+                "800k",
+
+                "-bufsize",
+                "1600k",
+
+                # Compatibilidad
+                "-pix_fmt",
+                "yuv420p",
+
+
+                # =================================================
+                # KEYFRAMES
+                # =================================================
+
+                # 60 frames = 2 segundos si estamos a 30 FPS
+                "-g",
+                "60",
+
+                "-keyint_min",
+                "60",
+
+                # Evitar keyframes variables
+                "-sc_threshold",
+                "0",
+
+                # Forzar keyframe cada 2 segundos
+                "-force_key_frames",
+                "expr:gte(t,n_forced*2)",
+
+
+                # =================================================
+                # AUDIO
+                # =================================================
+
+                "-c:a",
+                "aac",
+
+                "-b:a",
+                "64k",
+
+                # 48 kHz es habitual para streaming
+                "-ar",
+                "48000",
+
+                "-ac",
+                "2",
+
+
+                # =================================================
+                # SALIDA RTMP
+                # =================================================
+
+                "-f",
+                "flv",
+
+                # Evitar metadatos de duración/tamaño
+                "-flvflags",
+                "no_duration_filesize",
+
+                RTMP_URL
             ]
 
-            
+
             try:
-                # El proceso corre el video actual de principio a fin
-                process = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+                print("Ejecutando FFmpeg...")
+
+
+                process = subprocess.Popen(
+                    ffmpeg_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
+                )
+
+
+                # =================================================
+                # MOSTRAR LOG DE FFMPEG
+                # =================================================
+
                 for line in process.stdout:
-                    print(f"[FFmpeg OS] {line.strip()}")
+
+                    line = line.strip()
+
+                    if line:
+
+                        print(
+                            f"[FFmpeg] {line}"
+                        )
+
+
                 process.wait()
+
+
+                print()
+                print(
+                    f"FFmpeg terminó con código: "
+                    f"{process.returncode}"
+                )
+
+
             except Exception as e:
-                print(f"Fallo de conexión en hilo multimedia: {e}")
-            
+
+                print()
+                print(
+                    "FALLO DE CONEXIÓN EN FFmpeg:"
+                )
+
+                print(e)
+
+
+            # ====================================================
+            # PAUSA ANTES DE SIGUIENTE VIDEO
+            # ====================================================
+
+            print(
+                "Esperando 3 segundos antes "
+                "de reiniciar la transmisión..."
+            )
+
             time.sleep(3)
 
-@app.route('/')
+
+# ============================================================
+# RUTA DE COMPROBACIÓN
+# ============================================================
+
+@app.route("/")
 def home():
-    return "Contenedor Docker-FFmpeg para la Iglesia CEMOA Activo.", 200
+
+    return (
+        "Contenedor Docker-FFmpeg "
+        "para la Iglesia CEMOA Activo."
+    ), 200
+
+
+# ============================================================
+# INICIO
+# ============================================================
 
 if __name__ == "__main__":
-    threading.Thread(target=start_streaming, daemon=True).start()
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+
+    threading.Thread(
+        target=start_streaming,
+        daemon=True
+    ).start()
+
+
+    port = int(
+        os.environ.get(
+            "PORT",
+            10000
+        )
+    )
+
+
+    app.run(
+        host="0.0.0.0",
+        port=port
+    )
