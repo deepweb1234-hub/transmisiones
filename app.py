@@ -28,21 +28,23 @@ def start_streaming():
             
             ffmpeg_cmd = [
                 'ffmpeg',
-                '-re',
-                '-i', video_url,
+                '-re',                    # Forzar lectura en tiempo real
+                '-i', video_url,          # URL del video en Videonest
                 '-c:v', 'libx264',
-                '-preset', 'veryfast',
-                '-b:v', '1500k',
-                '-maxrate', '1500k',
-                '-bufsize', '3000k',
+                '-preset', 'ultrafast',   # Cambiado a ultrafast: usa el mínimo de CPU en Render
+                '-vf', 'scale=854:480',   # Redimensiona el video a 480p (Calidad estándar muy fluida)
+                '-b:v', '800k',           # Reducido a 800kbps (Excelente balance fluidez/calidad)
+                '-maxrate', '800k',
+                '-bufsize', '1600k',      # Búfer optimizado para evitar microcortes
                 '-pix_fmt', 'yuv420p',
-                '-g', '50',
+                '-g', '60',               # Fotogramas clave cada 2 segundos para estabilizar la red
                 '-c:a', 'aac',
-                '-b:a', '128k',
+                '-b:a', '64k',            # Reducido el audio a 64kbps (Suficiente para prédicas limpias)
                 '-ar', '44100',
                 '-f', 'flv',
-                RTMP_URL
+                RTMP_URL                  # Tu variable de SSH101
             ]
+
             
             try:
                 # El proceso corre el video actual de principio a fin
