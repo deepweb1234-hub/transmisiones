@@ -12,7 +12,7 @@ app = Flask(__name__)
 # ============================================================
 
 LISTA_VIDEOS = [
-    "https://gamma.videonest.org/8949c123-dd6a-431c-85d1-cc6cdeda2583_video_v5.mp4",
+    "https://live20.bozztv.com/giatvplayout/giatvvod/giatv/movies/playlist/212245/Intro1.mp4/playlist.m3u8",
 ]
 
 
